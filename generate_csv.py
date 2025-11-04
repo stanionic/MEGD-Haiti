@@ -1,20 +1,36 @@
-import os
 import csv
-from app import app, db, Ad
+import os
+from flask import Flask
+from models import db, Ad
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///glory2yahpub.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SERVER_NAME'] = 'localhost:5000'  # Configure SERVER_NAME
+app.config['PREFERRED_URL_SCHEME'] = 'http'
+
+db.init_app(app)
 
 with app.app_context():
-    ads = Ad.query.filter_by(admin_status='approved').all()
-    os.makedirs('csv', exist_ok=True)
-    for ad in ads:
-        filename = f'csv/{ad.ad_id}.csv'
-        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow(['Title', 'Description', 'Price', 'Media', 'URL'])
-            url = f'http://localhost:5000/shopping_cart/{ad.ad_id}'
-            # Get the media URL for display (image or video)
-            if ad.media_type == 'video' and ad.video:
-                media_url = f'http://localhost:5000/static/uploads/{ad.video}'
-            else:
-                first_image = ad.images.split(',')[0] if ad.images else ''
-                media_url = f'http://localhost:5000/static/uploads/{first_image}' if first_image else ''
-            writer.writerow([ad.title, ad.description, ad.price_gkach, media_url, url])
+    # Query all approved ads
+    approved_ads = Ad.query.filter_by(admin_status='approved').all()
+
+    # Prepare CSV data
+    csv_data = []
+    for ad in approved_ads:
+        title = ad.title or "No Title"
+        buttons = "Buy Now"  # Assuming a single button for simplicity
+        unique_url = f"http://localhost:5000/shopping_cart/{ad.ad_id}"  # Hardcoded URL
+        csv_data.append([title, buttons, unique_url])
+
+    # Write to CSV
+    csv_dir = 'csv'
+    os.makedirs(csv_dir, exist_ok=True)
+    csv_path = os.path.join(csv_dir, 'products.csv')
+
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Title', 'Buttons', 'Unique URL'])
+        writer.writerows(csv_data)
+
+    print(f"CSV generated at {csv_path}")
