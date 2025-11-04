@@ -42,7 +42,11 @@
 
         <div class="actions">
             <a href="{{ url_for('achte') }}" class="btn btn-secondary">Kontinye Achte</a>
-            <a href="{{ url_for('checkout', whatsapp=whatsapp) }}" class="btn btn-success">Peye Kounye a</a>
+            {% if all_negotiated %}
+                <a href="{{ url_for('checkout', whatsapp=whatsapp) }}" class="btn btn-success">Peye Kounye a</a>
+            {% else %}
+                <p style="color: red;">Ou dwe fini negosyasyon ak vandè a anvan ou ka peye.</p>
+            {% endif %}
         </div>
     {% else %}
         <p>Panier ou vid.</p>
