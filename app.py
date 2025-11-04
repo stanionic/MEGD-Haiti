@@ -676,6 +676,7 @@ def view_cart():
     cart_data = []
     total_price = 0
     all_shipping_set = True
+    all_negotiated = True
 
     for item in cart_items:
         ad = Ad.query.filter_by(ad_id=item.product_id).first()
@@ -692,8 +693,10 @@ def view_cart():
             })
             if not item.shipping_fee_set:
                 all_shipping_set = False
+            if item.negotiation_status != 'seller_updated':
+                all_negotiated = False
 
-    return render_template('view_cart.html', cart_items=cart_data, total_price=total_price, all_shipping_set=all_shipping_set, whatsapp=whatsapp)
+    return render_template('view_cart.html', cart_items=cart_data, total_price=total_price, all_shipping_set=all_shipping_set, all_negotiated=all_negotiated, whatsapp=whatsapp)
 
 @app.route('/set_shipping', methods=['POST'])
 def set_shipping():
