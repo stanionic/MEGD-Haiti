@@ -83,6 +83,7 @@ class CartItem(db.Model):
     shipping_fee_set = db.Column(db.Boolean, default=False)
     shipping_fee = db.Column(db.Float, default=0.0)
     negotiation_status = db.Column(db.String(20), default='cart')  # 'cart', 'buyer_submitted', 'seller_updated'
+    cart_id = db.Column(db.String(36), nullable=True)  # Unique ID for each cart submission
 
 class Ads_Owner(db.Model):
     __tablename__ = 'ads_owner'

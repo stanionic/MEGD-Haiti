@@ -1,15 +1,24 @@
-# TODO: Implement shopping_card_update for Buyer-Seller Shipping Negotiation
+# TODO: Update ADS Display Logic
 
-## Tasks
-- [x] Modify templates/shopping_card_update.html to include shipping_fee field and conditional display based on mode (enter, waiting, updated)
-- [x] Modify app.py shopping_card_update route to handle modes and POST logic for buyer submitting proposed shipping
-- [ ] Add new route /seller_update_cart/<buyer_whatsapp> in app.py for seller to update shipping price
-- [ ] Add new route /decline_cart/<whatsapp> in app.py for buyer to decline purchase
-- [ ] Create templates/seller_update_cart.html for seller to update shipping price
-- [ ] Modify checkout route in app.py to check negotiation_status == 'seller_updated' before proceeding
-- [ ] Update src/notifications.py if needed for cart notifications
-- [ ] Test the flow: buyer enters shipping, sends to seller, seller updates, sends back, buyer pays or declines
-- [ ] Ensure mobile-responsive design with Bootstrap 5
+## Overview
+Update the display logic in templates for ADS (ads) to match the requirements:
+- For ads labelled "Sell" (ad_type == 'sell'): Display only "Achte" and "Fe piblisite" buttons. Show price for all sell ads. Remove WhatsApp button and special case for 'Siwo Gwosi'.
+- For ads labelled "Publish only" (ad_type == 'publish'): Display "WhatsApp" and "Fe piblisite" buttons.
 
-## Status
-- Plan approved. Starting implementation.
+## Steps
+1. Update templates/achte.html: Modify the ad-actions logic to remove WhatsApp for sell ads, remove special case for 'Siwo Gwosi', and ensure publish ads show WhatsApp and Fe piblisite.
+2. Update templates/batch.html: Apply the same changes as in achte.html for consistency.
+3. Test the changes by running the app and verifying the button displays.
+
+## Files to Edit
+- templates/achte.html
+- templates/batch.html
+
+## Followup
+- After editing, run the app to ensure buttons display correctly.
+- No DB changes required as this is template logic.
+
+## Progress
+- [x] Updated templates/achte.html
+- [x] Updated templates/batch.html
+- [ ] Test the changes by running the app

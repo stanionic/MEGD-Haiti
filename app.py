@@ -33,6 +33,7 @@ from src.notifications import (
     notify_buyer_delivery_updated
 )
 from src.communication import send_message, get_messages, get_delivery_participants
+from src.gif_utils import generate_ad_gif
 
 app = Flask(__name__)
 app.secret_key = 'glory2yahpub_secret_key_2024'
@@ -455,8 +456,9 @@ def update_ad_status():
             ad.admin_status = status
             ad.payment_status = payment_status
             db.session.commit()
-            # Notify user based on status
+            # Generate GIF if approved and has multiple images
             if status == 'approved':
+                generate_ad_gif(ad)
                 notify_user_ad_approved(ad.user_whatsapp, ad_id)
             elif status == 'rejected':
                 notify_user_ad_rejected(ad.user_whatsapp, ad_id)
@@ -749,10 +751,13 @@ def checkout():
         flash('Panier ou vid.', 'error')
         return redirect(url_for('achte'))
 
-    # Check if all shipping fees are set
+    # Check if all shipping fees are set and negotiation is complete
     for item in cart_items:
         if not item.shipping_fee_set:
             flash('Tout pri livrezon dwe mete anvan ou ka peye.', 'error')
+            return redirect(url_for('view_cart', whatsapp=whatsapp))
+        if item.negotiation_status != 'seller_updated':
+            flash('Ou dwe fini negosyasyon ak vandè a anvan ou ka peye.', 'error')
             return redirect(url_for('view_cart', whatsapp=whatsapp))
 
     # Calculate total
@@ -1442,23 +1447,15 @@ def get_delivery_participants_api(delivery_id):
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
 
-@app.route('/shopping_card_update/<whatsapp>', methods=['GET', 'POST'])
-def shopping_card_update(whatsapp):
-    # Format WhatsApp number
-    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
-    if not whatsapp_digits.startswith('509'):
-        whatsapp_digits = '509' + whatsapp_digits
-    whatsapp = '+' + whatsapp_digits
-
-    user = User.query.filter_by(whatsapp=whatsapp).first()
-    if not user:
-        flash('Itilizatè pa jwenn.', 'error')
-        return redirect(url_for('achte'))
-
-    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+@app.route('/shopping_card_update/<cart_id>', methods=['GET', 'POST'])
+def shopping_card_update(cart_id):
+    cart_items = CartItem.query.filter_by(cart_id=cart_id).all()
     if not cart_items:
-        flash('Panier ou vid.', 'error')
+        flash('Pa gen atik nan panier sa a.', 'error')
         return redirect(url_for('achte'))
+
+    user = User.query.filter_by(id=cart_items[0].user_id).first()
+    whatsapp = user.whatsapp
 
     # Determine mode based on negotiation status
     negotiation_statuses = [item.negotiation_status for item in cart_items]
@@ -1472,14 +1469,14 @@ def shopping_card_update(whatsapp):
     if request.method == 'POST':
         if mode != 'enter_shipping':
             flash('Ou pa kapab soumèt pwopozisyon sa a ankò.', 'error')
-            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+            return redirect(url_for('shopping_card_update', cart_id=cart_id))
 
         delivery_address = request.form.get('delivery_address', '').strip()
         shipping_price = request.form.get('shipping_price', '').strip()
 
         if not delivery_address:
             flash('Adrès livrezon obligatwa.', 'error')
-            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+            return redirect(url_for('shopping_card_update', cart_id=cart_id))
 
         try:
             shipping_price = int(shipping_price)
@@ -1487,12 +1484,12 @@ def shopping_card_update(whatsapp):
                 raise ValueError
         except ValueError:
             flash('Pri livrezon valab obligatwa.', 'error')
-            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+            return redirect(url_for('shopping_card_update', cart_id=cart_id))
 
         # Check terms acceptance
         if not request.form.get('accept_terms'):
             flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
-            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+            return redirect(url_for('shopping_card_update', cart_id=cart_id))
 
         # Update cart items with shipping fee and status
         for item in cart_items:
@@ -1515,7 +1512,7 @@ def shopping_card_update(whatsapp):
                 break  # Assuming single seller for simplicity
 
         if seller_whatsapp:
-            update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
+            update_cart_url = url_for('seller_update_cart', cart_id=cart_id, _external=True)
             message = f"🛒 NOUVO DEMANN LIVREZON - ACHTE PANIER\n\n📦 Piblisite: {ad_title}\n💰 Pri pwodwi: {total_price} Gkach\n👤 Achte pa: {whatsapp}\n📍 Adrès livrezon: {delivery_address}\n💸 Pri livrezon pwopoze: {shipping_price} Gkach\n\n📋 Detay:\n- Pri total pwopoze: {total_price + shipping_price} Gkach\n\n🔗 Klik sou lyen sa a pou mete ajou pri livrezon an: {update_cart_url}\n\n⚠️ Tanpri revize epi mete ajou pri livrezon an si nesesè."
             whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
             # Redirect to WhatsApp
@@ -1542,12 +1539,10 @@ def shopping_card_update(whatsapp):
                 'shipping_fee': item.shipping_fee
             })
 
-    return render_template('shopping_card_update.html', cart_items=cart_data, total_price=total_price, whatsapp=whatsapp, mode=mode, delivery_address='')
+    return render_template('shopping_card_update.html', cart_items=cart_data, total_price=total_price, whatsapp=whatsapp, mode=mode, delivery_address='', cart_id=cart_id)
 
-@app.route('/seller_update_cart', methods=['GET', 'POST'])
-def seller_update_cart():
-    buyer_whatsapp = request.args.get('buyer_whatsapp', '').strip()
-
+@app.route('/seller_update_cart/<buyer_whatsapp>', methods=['GET', 'POST'])
+def seller_update_cart(buyer_whatsapp):
     # Format WhatsApp number
     whatsapp_digits = ''.join(filter(str.isdigit, buyer_whatsapp))
     if not whatsapp_digits.startswith('509'):
