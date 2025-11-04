@@ -60,13 +60,27 @@
         </div>
 
         <div class="form-group">
+            <label>Chwazi Tip Piblisite *</label>
+            <div class="ad-type-selector">
+                <label class="ad-option">
+                    <input type="radio" name="ad_type" value="publish" checked>
+                    <span>PUBLISH ONLY</span>
+                </label>
+                <label class="ad-option">
+                    <input type="radio" name="ad_type" value="sell">
+                    <span>SELL</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
             <label for="description">Deskripsyon Kout *</label>
             <textarea id="description" name="description" required
                       maxlength="300" placeholder="Ekri yon deskripsyon kout sou sa w ap vann oswa ofri..."></textarea>
             <small>Maksimòm 300 karaktè</small>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" id="price-section">
             <label for="price_gourdes">Pri an Gourdes (HTG) *</label>
             <input type="number" id="price_gourdes" name="price_gourdes" required min="0.01" step="0.01"
                    placeholder="Egzamp: 5000.00">
@@ -88,4 +102,56 @@
         <button type="submit" class="btn btn-gold">Soumèt Piblisite</button>
     </form>
 </div>
+
+<style>
+.ad-type-selector {
+    display: flex;
+    gap: 20px;
+}
+
+.ad-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.ad-option input[type="radio"] {
+    margin: 0;
+}
+
+.ad-option span {
+    font-weight: bold;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const adTypeRadios = document.querySelectorAll('input[name="ad_type"]');
+    const priceSection = document.getElementById('price-section');
+    const priceInput = document.getElementById('price_gourdes');
+
+    function togglePriceSection() {
+        const selectedAdType = document.querySelector('input[name="ad_type"]:checked').value;
+        if (selectedAdType === 'publish') {
+            priceSection.style.display = 'none';
+            priceInput.required = false;
+            priceInput.value = '';
+            document.getElementById('price_gkach').value = '0';
+            document.getElementById('gkach-price').textContent = '0';
+        } else {
+            priceSection.style.display = 'block';
+            priceInput.required = true;
+        }
+    }
+
+    adTypeRadios.forEach(radio => {
+        radio.addEventListener('change', togglePriceSection);
+    });
+
+    // Initial check
+    togglePriceSection();
+});
+</script>
+
 {% endblock %}

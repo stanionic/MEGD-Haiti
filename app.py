@@ -1,10 +1,11 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, make_response, send_from_directory
-from models import db, Ad, Batch, UserGkach, GkachRate, Delivery, Message
+from models import db, Ad, Batch, UserGkach, GkachRate, Delivery, Message, User, CartItem, Ads_Owner
 import uuid
 import os
 import json
 import random
 import csv
+import urllib.parse
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from src.logger import setup_logger
@@ -29,13 +30,13 @@ from src.notifications import (
     notify_admin_traffic_alert,
     notify_admin_otp,
     notify_seller_delivery_request,
-    notify_buyer_delivery_updated,
-    notify_buyer_cart_submitted
+    notify_buyer_delivery_updated
 )
 from src.communication import send_message, get_messages, get_delivery_participants
 
 app = Flask(__name__)
 app.secret_key = 'glory2yahpub_secret_key_2024'
+ADMIN_WHATSAPP = "+50942882076"
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB for video uploads
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///glory2yahpub.db'
@@ -145,6 +146,7 @@ def submit_ad():
         user_whatsapp = request.form.get('whatsapp', '').strip()
         title = request.form.get('title', '').strip()
         description = request.form.get('description', '').strip()
+        ad_type = request.form.get('ad_type', 'publish')
         price_gkach = request.form.get('price_gkach', '').strip()
 
         # Format WhatsApp number: remove non-digits, ensure +509 prefix
@@ -162,13 +164,16 @@ def submit_ad():
         if not description:
             flash('Deskripsyon piblisite a obligatwa.', 'error')
             return redirect(url_for('submit_ad'))
-        try:
-            price_gkach = int(price_gkach)
-            if price_gkach <= 0:
-                raise ValueError
-        except ValueError:
-            flash('Pri Gkach valab obligatwa (egz: 100).', 'error')
-            return redirect(url_for('submit_ad'))
+        if ad_type == 'sell':
+            try:
+                price_gkach = int(price_gkach)
+                if price_gkach <= 0:
+                    raise ValueError
+            except ValueError:
+                flash('Pri Gkach valab obligatwa (egz: 100).', 'error')
+                return redirect(url_for('submit_ad'))
+        else:
+            price_gkach = 0
 
         # Check terms acceptance
         if not request.form.get('accept_terms'):
@@ -265,10 +270,19 @@ def submit_ad():
                 video=saved_video,
                 description=description,
                 title=title,
+                ad_type=ad_type,
                 price_gkach=price_gkach,
                 created_at=datetime.utcnow()
             )
             db.session.add(new_ad)
+
+            # Create Ads_Owner entry
+            new_ads_owner = Ads_Owner(
+                ad_id=ad_id,
+                publishers_whatsapp=user_whatsapp,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(new_ads_owner)
             db.session.commit()
             logger.info(f"Ad submitted successfully: {ad_id}")
             # Notify admin of new ad submission
@@ -583,125 +597,222 @@ def search_by_image():
     else:
         return jsonify({'success': False, 'message': 'Tip dosye pa aksepte.'}), 400
 
-@app.route('/shopping_cart/<ad_id>', methods=['GET', 'POST'])
-def shopping_cart(ad_id):
-    ad = Ad.query.filter_by(ad_id=ad_id, admin_status='approved').first()
+@app.route('/add_to_cart', methods=['POST'])
+def add_to_cart():
+    whatsapp = request.form.get('whatsapp', '').strip()
+    name = request.form.get('name', '').strip()
+    quantity = request.form.get('quantity', 1)
+    product_id = request.form.get('product_id', '').strip()
+
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    if not whatsapp or not name or not product_id:
+        flash('Tout enfòmasyon obligatwa.', 'error')
+        return redirect(url_for('achte'))
+
+    try:
+        quantity = int(quantity)
+        if quantity <= 0:
+            raise ValueError
+    except ValueError:
+        flash('Kantite valab obligatwa.', 'error')
+        return redirect(url_for('achte'))
+
+    # Get or create user
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        user = User(name=name, whatsapp=whatsapp)
+        db.session.add(user)
+        db.session.commit()
+
+    # Check if ad exists
+    ad = Ad.query.filter_by(ad_id=product_id, admin_status='approved').first()
     if not ad:
         flash('Piblisite pa jwenn.', 'error')
         return redirect(url_for('achte'))
 
-    # Get cart from session or initialize empty cart
-    cart = session.get('cart', {})
+    # Add to cart
+    cart_item = CartItem.query.filter_by(user_id=user.id, product_id=product_id).first()
+    if cart_item:
+        cart_item.quantity += quantity
+    else:
+        cart_item = CartItem(user_id=user.id, product_id=product_id, quantity=quantity)
+        db.session.add(cart_item)
+    db.session.commit()
 
-    if request.method == 'POST':
-        action = request.form.get('action', 'add_to_cart')
+    # Notify buyer
+    from src.notifications import notify_buyer_add_to_cart
+    notify_buyer_add_to_cart(whatsapp, ad.title, quantity)
 
-        if action == 'add_to_cart':
-            # Add item to cart
-            if ad_id not in cart:
-                cart[ad_id] = {
-                    'quantity': 1,
-                    'price': ad.price_gkach,
-                    'title': ad.title,
-                    'seller_whatsapp': ad.user_whatsapp
-                }
-            else:
-                cart[ad_id]['quantity'] += 1
+    flash('Piblisite ajoute nan panier!', 'success')
+    return redirect(url_for('achte'))
 
-            session['cart'] = cart
-            flash('Piblisite ajoute nan panier!', 'success')
-            return redirect(url_for('achte'))
+@app.route('/view_cart', methods=['GET'])
+def view_cart():
+    whatsapp = request.args.get('whatsapp', '').strip()
 
-        elif action == 'checkout':
-            user_whatsapp = request.form.get('whatsapp', '').strip()
-            delivery_address = request.form.get('delivery_address', '').strip()
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
 
-            # Format WhatsApp number: ensure +509xxxxxxxx format
-            user_whatsapp_digits = ''.join(filter(str.isdigit, user_whatsapp))
-            if len(user_whatsapp_digits) >= 8:
-                user_whatsapp = '+509' + user_whatsapp_digits[-8:]
-            else:
-                user_whatsapp = ''
+    if not whatsapp:
+        flash('Numéro WhatsApp obligatwa.', 'error')
+        return redirect(url_for('achte'))
 
-            if not user_whatsapp:
-                flash('Numéro WhatsApp valab obligatwa (eg: +50912345678).', 'error')
-                return redirect(url_for('shopping_cart', ad_id=ad_id))
-            if not delivery_address:
-                flash('Adrès livrezon obligatwa.', 'error')
-                return redirect(url_for('shopping_cart', ad_id=ad_id))
-            if not cart:
-                flash('Panier ou vid.', 'error')
-                return redirect(url_for('shopping_cart', ad_id=ad_id))
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
 
-            # Check terms acceptance
-            if not request.form.get('accept_terms'):
-                flash('Ou dwe aksepte kondisyon ak règleman yo pou achte piblisite.', 'error')
-                return redirect(url_for('shopping_cart', ad_id=ad_id))
-
-            # Group cart items by seller
-            seller_carts = {}
-            for item_ad_id, item_data in cart.items():
-                seller = item_data['seller_whatsapp']
-                if seller not in seller_carts:
-                    seller_carts[seller] = []
-                seller_carts[seller].append({
-                    'ad_id': item_ad_id,
-                    'quantity': item_data['quantity'],
-                    'price': item_data['price'],
-                    'title': item_data['title']
-                })
-
-            # Create delivery records for each seller
-            delivery_ids = []
-            for seller_whatsapp, items in seller_carts.items():
-                delivery_id = str(uuid.uuid4())
-                total_price = sum(item['price'] * item['quantity'] for item in items)
-
-                delivery = Delivery(
-                    delivery_id=delivery_id,
-                    buyer_whatsapp=user_whatsapp,
-                    seller_whatsapp=seller_whatsapp,
-                    delivery_cost=0,  # To be set by seller
-                    total_price=total_price,
-                    status='negotiating',
-                    cart_items=json.dumps(items),
-                    delivery_address=delivery_address
-                )
-                db.session.add(delivery)
-                delivery_ids.append(delivery_id)
-
-                # Send WhatsApp notification to seller with cart details
-                notify_seller_delivery_request(seller_whatsapp, user_whatsapp, delivery_address, delivery_id, items, total_price)
-
-            db.session.commit()
-
-            # Send WhatsApp notification to buyer
-            notify_buyer_cart_submitted(user_whatsapp, cart, delivery_address, delivery_ids)
-
-            # Store delivery_ids in session
-            session['delivery_ids'] = delivery_ids
-            session.pop('cart', None)  # Clear cart after checkout
-
-            flash('Demann livrezon voye bay vandè yo! Vandè yo pral mete pri livrezon byento. Ou pral resevwa yon mesaj lè pri yo mete ajou.', 'info')
-            return redirect(url_for('cart_success_page'))
-
-    # Calculate cart totals
-    cart_items = []
-    total_items = 0
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    cart_data = []
     total_price = 0
+    all_shipping_set = True
 
-    for item_ad_id, item_data in cart.items():
-        item_ad = Ad.query.filter_by(ad_id=item_ad_id).first()
-        if item_ad:
-            cart_items.append({
-                'ad': item_ad,
-                'quantity': item_data['quantity'],
-                'subtotal': item_data['price'] * item_data['quantity']
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            subtotal = ad.price_gkach * item.quantity
+            total_price += subtotal
+            cart_data.append({
+                'id': item.id,
+                'ad': ad,
+                'quantity': item.quantity,
+                'subtotal': subtotal,
+                'shipping_fee_set': item.shipping_fee_set,
+                'shipping_fee': item.shipping_fee
             })
-            total_items += item_data['quantity']
-            total_price += item_data['price'] * item_data['quantity']
+            if not item.shipping_fee_set:
+                all_shipping_set = False
 
-    return render_template('shopping_cart.html', ad=ad, cart=cart, cart_items=cart_items, total_items=total_items, total_price=total_price)
+    return render_template('view_cart.html', cart_items=cart_data, total_price=total_price, all_shipping_set=all_shipping_set, whatsapp=whatsapp)
+
+@app.route('/set_shipping', methods=['POST'])
+def set_shipping():
+    cart_id = request.form.get('cart_id')
+    shipping_fee = request.form.get('shipping_fee', 0)
+
+    try:
+        shipping_fee = float(shipping_fee)
+        if shipping_fee < 0:
+            raise ValueError
+    except ValueError:
+        flash('Pri livrezon valab obligatwa.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_item = CartItem.query.filter_by(id=cart_id).first()
+    if not cart_item:
+        flash('Atik nan panier pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_item.shipping_fee = shipping_fee
+    cart_item.shipping_fee_set = True
+    db.session.commit()
+
+    # Notify buyer
+    user = User.query.filter_by(id=cart_item.user_id).first()
+    ad = Ad.query.filter_by(ad_id=cart_item.product_id).first()
+    if user and ad:
+        from src.notifications import notify_buyer_shipping_set
+        notify_buyer_shipping_set(user.whatsapp, ad.title, shipping_fee)
+
+    flash('Pri livrezon mete ajou!', 'success')
+    return redirect(url_for('view_cart', whatsapp=user.whatsapp))
+
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    whatsapp = request.form.get('whatsapp', '').strip()
+
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    if not whatsapp:
+        flash('Numéro WhatsApp obligatwa.', 'error')
+        return redirect(url_for('achte'))
+
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    if not cart_items:
+        flash('Panier ou vid.', 'error')
+        return redirect(url_for('achte'))
+
+    # Check if all shipping fees are set
+    for item in cart_items:
+        if not item.shipping_fee_set:
+            flash('Tout pri livrezon dwe mete anvan ou ka peye.', 'error')
+            return redirect(url_for('view_cart', whatsapp=whatsapp))
+
+    # Calculate total
+    total_gkach = 0
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            total_gkach += ad.price_gkach * item.quantity + item.shipping_fee
+
+    # Check balance
+    user_gkach = UserGkach.query.filter_by(user_whatsapp=whatsapp).first()
+    if not user_gkach or user_gkach.gkach_balance < total_gkach:
+        flash('Ou pa gen ase Gkach.', 'error')
+        return redirect(url_for('achte_gkach'))
+
+    # Deduct balance
+    user_gkach.gkach_balance -= total_gkach
+    db.session.commit()
+
+    # Create deliveries
+    delivery_ids = []
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            delivery_id = str(uuid.uuid4())
+            delivery = Delivery(
+                delivery_id=delivery_id,
+                buyer_whatsapp=whatsapp,
+                seller_whatsapp=ad.user_whatsapp,
+                delivery_cost=item.shipping_fee,
+                total_price=ad.price_gkach * item.quantity,
+                status='confirmed',
+                cart_items=json.dumps([{
+                    'ad_id': item.product_id,
+                    'quantity': item.quantity,
+                    'price': ad.price_gkach,
+                    'title': ad.title
+                }]),
+                delivery_address=''  # Can be updated later
+            )
+            db.session.add(delivery)
+            delivery_ids.append(delivery_id)
+
+            # Credit seller
+            seller_gkach = UserGkach.query.filter_by(user_whatsapp=ad.user_whatsapp).first()
+            if seller_gkach:
+                seller_gkach.gkach_balance += ad.price_gkach * item.quantity + item.shipping_fee
+
+    db.session.commit()
+
+    # Clear cart
+    CartItem.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+
+    # Notify buyer
+    from src.notifications import notify_buyer_checkout
+    notify_buyer_checkout(whatsapp, total_gkach, delivery_ids)
+
+    flash(f'Achte avèk siksè! Ou te depanse {total_gkach} Gkach.', 'success')
+    return redirect(url_for('achte'))
 
 @app.route('/cart_success')
 def cart_success_page():
@@ -745,12 +856,15 @@ def cart_success_page():
 
 @app.route('/achte/check_balance/<ad_id>', methods=['GET'])
 def check_balance(ad_id):
-    # Get delivery_id from session
-    delivery_id = session.get('delivery_id')
+    # Get delivery_id from query param or session
+    delivery_id = request.args.get('delivery_id') or session.get('delivery_id')
 
     if not delivery_id:
         flash('Sesyon ekspire. Eseye ankò.', 'error')
         return redirect(url_for('achte'))
+
+    # Set session if from query
+    session['delivery_id'] = delivery_id
 
     delivery = Delivery.query.filter_by(delivery_id=delivery_id).first()
     if not delivery or delivery.ad_id != ad_id:
@@ -769,6 +883,98 @@ def check_balance(ad_id):
     total_price = delivery.total_price + delivery.delivery_cost
 
     return render_template('check_balance.html', balance=balance, ad=ad, whatsapp=delivery.buyer_whatsapp, price=total_price, delivery=delivery)
+
+@app.route('/shopping_cart/<ad_id>', methods=['GET', 'POST'])
+def shopping_cart(ad_id):
+    ad = Ad.query.filter_by(ad_id=ad_id, admin_status='approved').first()
+    if not ad:
+        flash('Piblisite pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    if request.method == 'POST':
+        whatsapp = request.form.get('whatsapp', '').strip()
+        delivery_address = request.form.get('delivery_address', '').strip()
+        price = request.form.get('price', '').strip()
+
+        # Format WhatsApp number
+        whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+        if not whatsapp_digits.startswith('509'):
+            whatsapp_digits = '509' + whatsapp_digits
+        whatsapp = '+' + whatsapp_digits
+
+        if not whatsapp or len(whatsapp) < 12:
+            flash('Numéro WhatsApp valab obligatwa.', 'error')
+            return redirect(url_for('shopping_cart', ad_id=ad_id))
+
+        if not delivery_address:
+            flash('Adrès livrezon obligatwa.', 'error')
+            return redirect(url_for('shopping_cart', ad_id=ad_id))
+
+        try:
+            price = int(price)
+            if price <= 0:
+                raise ValueError
+        except ValueError:
+            flash('Pri valab obligatwa.', 'error')
+            return redirect(url_for('shopping_cart', ad_id=ad_id))
+
+        # Check terms acceptance
+        if not request.form.get('accept_terms'):
+            flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
+            return redirect(url_for('shopping_cart', ad_id=ad_id))
+
+        # Check balance
+        user_gkach = UserGkach.query.filter_by(user_whatsapp=whatsapp).first()
+        if not user_gkach or user_gkach.gkach_balance < price:
+            flash('Ou pa gen ase Gkach. Achte Gkach anvan.', 'error')
+            return redirect(url_for('achte_gkach'))
+
+        # Deduct balance
+        user_gkach.gkach_balance -= price
+
+        # Credit seller
+        seller_gkach = UserGkach.query.filter_by(user_whatsapp=ad.user_whatsapp).first()
+        if seller_gkach:
+            seller_gkach.gkach_balance += price
+
+        # Create delivery
+        delivery_id = str(uuid.uuid4())
+        delivery = Delivery(
+            delivery_id=delivery_id,
+            ad_id=ad_id,
+            buyer_whatsapp=whatsapp,
+            seller_whatsapp=ad.user_whatsapp,
+            delivery_cost=0,  # No delivery cost for now
+            total_price=price,
+            status='confirmed',
+            cart_items=json.dumps([{
+                'ad_id': ad_id,
+                'quantity': 1,
+                'price': price,
+                'title': ad.title
+            }]),
+            delivery_address=delivery_address
+        )
+        db.session.add(delivery)
+        db.session.commit()
+
+        # Notify buyer and seller
+        notify_user_ad_purchased(whatsapp, ad_id, price)
+        notify_seller_delivery_request(ad.user_whatsapp, whatsapp, delivery_address, delivery_id, ad.title, price)
+
+        # Redirect to seller's WhatsApp chat with link to update cart
+        ads_owner = Ads_Owner.query.filter_by(ad_id=ad_id).first()
+        if ads_owner:
+            seller_whatsapp = ads_owner.publishers_whatsapp
+            update_cart_url = url_for('seller_update_cart', delivery_id=delivery_id, _external=True)
+            message = f"Hi, I just purchased your ad '{ad.title}' for {price} Gkach. Please update the cart with delivery details. Update here: {update_cart_url}"
+            whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
+            return redirect(whatsapp_url)
+        else:
+            flash('Seller not found.', 'error')
+            return redirect(url_for('achte'))
+
+    return render_template('shopping_cart.html', ad=ad)
 
 @app.route('/achte_gkach', methods=['GET', 'POST'])
 def achte_gkach():
@@ -1183,12 +1389,16 @@ def set_delivery(delivery_id):
         delivery.status = 'price_set'
         db.session.commit()
 
-        # Send WhatsApp notification to buyer with updated price
+        # Prepare WhatsApp message for seller to send to buyer
         total_price = delivery.total_price + delivery_cost
+        whatsapp_message = f"Pri livrezon mete ajou. Pri total: {total_price} Gkach. Tanpri tcheke balans ou epi achte: {url_for('check_balance', ad_id=delivery.ad_id, delivery_id=delivery_id, _external=True)}"
+        whatsapp_url = f"https://wa.me/{delivery.buyer_whatsapp.replace('+', '')}?text={whatsapp_message}"
+
+        # Send WhatsApp notification to buyer with updated price
         notify_buyer_delivery_updated(delivery.buyer_whatsapp, delivery_cost, total_price, delivery_id)
 
-        flash('Pri livrezon mete ajou avèk siksè! Achete a resevwa mesaj WhatsApp.', 'success')
-        return redirect(url_for('index'))
+        flash('Pri livrezon mete ajou avèk siksè! Ou ka voye mesaj WhatsApp bay achete a.', 'success')
+        return render_template('set_delivery.html', delivery=delivery, ad=ad, success=True, whatsapp_url=whatsapp_url)
 
     return render_template('set_delivery.html', delivery=delivery, ad=ad)
 
@@ -1231,6 +1441,217 @@ def get_delivery_participants_api(delivery_id):
         return jsonify(participants)
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
+
+@app.route('/shopping_card_update/<whatsapp>', methods=['GET', 'POST'])
+def shopping_card_update(whatsapp):
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    if not cart_items:
+        flash('Panier ou vid.', 'error')
+        return redirect(url_for('achte'))
+
+    # Determine mode based on negotiation status
+    negotiation_statuses = [item.negotiation_status for item in cart_items]
+    if 'seller_updated' in negotiation_statuses:
+        mode = 'seller_updated'
+    elif 'buyer_submitted' in negotiation_statuses:
+        mode = 'waiting_for_seller'
+    else:
+        mode = 'enter_shipping'
+
+    if request.method == 'POST':
+        if mode != 'enter_shipping':
+            flash('Ou pa kapab soumèt pwopozisyon sa a ankò.', 'error')
+            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+
+        delivery_address = request.form.get('delivery_address', '').strip()
+        shipping_price = request.form.get('shipping_price', '').strip()
+
+        if not delivery_address:
+            flash('Adrès livrezon obligatwa.', 'error')
+            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+
+        try:
+            shipping_price = int(shipping_price)
+            if shipping_price < 0:
+                raise ValueError
+        except ValueError:
+            flash('Pri livrezon valab obligatwa.', 'error')
+            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+
+        # Check terms acceptance
+        if not request.form.get('accept_terms'):
+            flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
+            return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
+
+        # Update cart items with shipping fee and status
+        for item in cart_items:
+            item.shipping_fee = shipping_price
+            item.shipping_fee_set = True
+            item.negotiation_status = 'buyer_submitted'
+
+        db.session.commit()
+
+        # Send WhatsApp notification to seller with link to update cart
+        seller_whatsapp = None
+        ad_title = None
+        total_price = 0
+        for item in cart_items:
+            ad = Ad.query.filter_by(ad_id=item.product_id).first()
+            if ad:
+                seller_whatsapp = ad.user_whatsapp
+                ad_title = ad.title
+                total_price += ad.price_gkach * item.quantity
+                break  # Assuming single seller for simplicity
+
+        if seller_whatsapp:
+            update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
+            message = f"🛒 NOUVO DEMANN LIVREZON - ACHTE PANIER\n\n📦 Piblisite: {ad_title}\n💰 Pri pwodwi: {total_price} Gkach\n👤 Achte pa: {whatsapp}\n📍 Adrès livrezon: {delivery_address}\n💸 Pri livrezon pwopoze: {shipping_price} Gkach\n\n📋 Detay:\n- Pri total pwopoze: {total_price + shipping_price} Gkach\n\n🔗 Klik sou lyen sa a pou mete ajou pri livrezon an: {update_cart_url}\n\n⚠️ Tanpri revize epi mete ajou pri livrezon an si nesesè."
+            whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
+            # Redirect to WhatsApp
+            return redirect(whatsapp_url)
+
+        flash('Panier ou soumèt avèk siksè! Vandè a pral kontakte ou sou WhatsApp pou konfime pri livrezon.', 'success')
+        return redirect(url_for('achte'))
+
+    # GET: Display based on mode
+    cart_data = []
+    total_price = 0
+
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            subtotal = ad.price_gkach * item.quantity
+            total_price += subtotal
+            cart_data.append({
+                'id': item.id,
+                'ad': ad,
+                'quantity': item.quantity,
+                'subtotal': subtotal,
+                'shipping_fee_set': item.shipping_fee_set,
+                'shipping_fee': item.shipping_fee
+            })
+
+    return render_template('shopping_card_update.html', cart_items=cart_data, total_price=total_price, whatsapp=whatsapp, mode=mode, delivery_address='')
+
+@app.route('/seller_update_cart', methods=['GET', 'POST'])
+def seller_update_cart():
+    buyer_whatsapp = request.args.get('buyer_whatsapp', '').strip()
+
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, buyer_whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    buyer_whatsapp = '+' + whatsapp_digits
+
+    if not buyer_whatsapp:
+        flash('Numéro WhatsApp achete obligatwa.', 'error')
+        return redirect(url_for('achte'))
+
+    user = User.query.filter_by(whatsapp=buyer_whatsapp).first()
+    if not user:
+        flash('Achte pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    if not cart_items:
+        flash('Pa gen atik nan panier achete a.', 'error')
+        return redirect(url_for('achte'))
+
+    if request.method == 'POST':
+        # Update shipping fees
+        for item in cart_items:
+            shipping_key = f'shipping_{item.id}'
+            new_shipping = request.form.get(shipping_key, '').strip()
+            try:
+                new_shipping = int(new_shipping)
+                if new_shipping < 0:
+                    raise ValueError
+                item.shipping_fee = new_shipping
+                item.negotiation_status = 'seller_updated'
+            except ValueError:
+                flash(f'Pri livrezon valab obligatwa pou atik {item.id}.', 'error')
+                return redirect(request.url)
+
+        db.session.commit()
+
+        # Calculate totals for notification
+        total_product_price = 0
+        total_shipping_proposed = 0
+        ad_title = None
+        for item in cart_items:
+            ad = Ad.query.filter_by(ad_id=item.product_id).first()
+            if ad:
+                total_product_price += ad.price_gkach * item.quantity
+                total_shipping_proposed += item.shipping_fee
+                if not ad_title:
+                    ad_title = ad.title
+
+        # Send notification to buyer
+        update_url = url_for('shopping_card_update', whatsapp=buyer_whatsapp, _external=True)
+        from src.notifications import notify_buyer_shipping_updated
+        notify_buyer_shipping_updated(buyer_whatsapp, ad_title, total_shipping_proposed, total_product_price, update_url)
+
+        flash('Pri livrezon mete ajou! Achete a resevwa yon notifikasyon WhatsApp.', 'success')
+        return redirect(url_for('achte'))
+
+    # GET: Display cart for seller to update
+    cart_data = []
+    total_product_price = 0
+    total_shipping_proposed = 0
+
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            subtotal = ad.price_gkach * item.quantity
+            total_product_price += subtotal
+            total_shipping_proposed += item.shipping_fee
+            cart_data.append({
+                'id': item.id,
+                'ad': ad,
+                'quantity': item.quantity,
+                'subtotal': subtotal,
+                'shipping_fee': item.shipping_fee
+            })
+
+    total_proposed = total_product_price + total_shipping_proposed
+
+    return render_template('seller_update_cart.html',
+                         cart_items=cart_data,
+                         buyer_whatsapp=buyer_whatsapp,
+                         total_product_price=total_product_price,
+                         total_shipping_proposed=total_shipping_proposed,
+                         total_proposed=total_proposed)
+
+@app.route('/decline_cart/<whatsapp>')
+def decline_cart(whatsapp):
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    # Clear cart
+    CartItem.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+
+    flash('Ou te refize acha a. Panier ou vide.', 'info')
+    return redirect(url_for('achte'))
 
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

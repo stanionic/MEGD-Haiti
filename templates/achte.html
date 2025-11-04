@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+play {% extends "base.html" %}
 
 {% block content %}
 <div class="container">
@@ -7,8 +7,8 @@
     <!-- Search Form -->
     <div class="search-container">
         <form method="GET" action="{{ url_for('achte') }}" class="search-form">
-            <input type="text" name="search" value="{{ search_query }}" placeholder="Chèche piblisite pa tit oubyen deskripsyon..." class="search-input">
-            <button type="submit" class="search-btn">Chèche</button>
+            <input type="text" name="search" value="{{ search_query }}" placeholder="Cheche pa Tit" class="search-input" style="width: 150px;">
+            <button type="submit" class="search-btn"><i class="fas fa-search"></i></button>
         </form>
         <form id="image-search-form" enctype="multipart/form-data" class="image-search-form">
             <input type="file" id="image-upload" name="image" accept="image/*" style="display: none;">
@@ -36,10 +36,20 @@
             <div class="ad-content">
                 <div class="ad-text">
                     <h4>{{ ad.title }}</h4>
+                    <p>{{ ad.description }}</p>
                 </div>
                 <div class="ad-actions">
+                    {% if ad.ad_type == 'sell' and ad.title != 'Siwo Gwosi' %}
                     <p><strong>Pri: {{ ad.price_gkach }} Gkach</strong></p>
+                    <a href="https://wa.me/{{ ad.user_whatsapp.lstrip('+') if ad.user_whatsapp else '' }}?text={{ ('Mwen enterese ak ' + (ad.title or 'piblisite sa') + ' w lan') | urlencode }}"
+                       class="btn btn-whatsapp btn-icon" target="_blank">
+                        <i class="fab fa-whatsapp"></i>
+                    </a>
                     <a href="{{ url_for('shopping_cart', ad_id=ad.ad_id) }}" class="btn btn-blue btn-icon" onclick="event.stopPropagation()"><i class="fas fa-shopping-cart"></i></a>
+                    <a href="{{ url_for('submit_ad') }}" class="btn btn-gold btn-icon">
+                        <i class="fas fa-bullhorn"></i>
+                    </a>
+                    {% elif ad.ad_type == 'sell' and ad.title == 'Siwo Gwosi' %}
                     <a href="https://wa.me/{{ ad.user_whatsapp.lstrip('+') if ad.user_whatsapp else '' }}?text={{ ('Mwen enterese ak ' + (ad.title or 'piblisite sa') + ' w lan') | urlencode }}"
                        class="btn btn-whatsapp btn-icon" target="_blank">
                         <i class="fab fa-whatsapp"></i>
@@ -47,6 +57,16 @@
                     <a href="{{ url_for('submit_ad') }}" class="btn btn-gold btn-icon">
                         <i class="fas fa-bullhorn"></i>
                     </a>
+                    {% else %}
+                    <p><strong>Piblisite Sèlman</strong></p>
+                    <a href="https://wa.me/{{ ad.user_whatsapp.lstrip('+') if ad.user_whatsapp else '' }}?text={{ ('Mwen enterese ak ' + (ad.title or 'piblisite sa') + ' w lan') | urlencode }}"
+                       class="btn btn-whatsapp btn-icon" target="_blank">
+                        <i class="fab fa-whatsapp"></i>
+                    </a>
+                    <a href="{{ url_for('submit_ad') }}" class="btn btn-gold btn-icon">
+                        <i class="fas fa-bullhorn"></i>
+                    </a>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -75,12 +95,12 @@
 .search-form {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 5px;
 }
 
 .image-search-form {
     display: inline-block;
-    margin-left: 10px;
+    margin-left: 5px;
 }
 
 .camera-btn {
@@ -411,4 +431,5 @@ document.getElementById('image-upload').addEventListener('change', function(even
 });
 
 </script>
+
 {% endblock %}

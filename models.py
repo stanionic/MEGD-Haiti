@@ -13,6 +13,7 @@ class Ad(db.Model):
     video = db.Column(db.String(255))  # Filename for video
     description = db.Column(db.Text, nullable=False)
     title = db.Column(db.String(100))  # New title field
+    ad_type = db.Column(db.String(10), nullable=False, default='sell')  # 'publish' or 'sell'
     payment_status = db.Column(db.String(20), default='pending')
     payment_proof = db.Column(db.String(255))
     admin_status = db.Column(db.String(20), default='under_review')
@@ -64,6 +65,33 @@ class Delivery(db.Model):
     # New fields for cart functionality
     cart_items = db.Column(db.Text)  # JSON string for multiple cart items
     delivery_address = db.Column(db.Text, nullable=True)  # Store delivery address here
+
+class User(db.Model):
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100))
+    whatsapp = db.Column(db.String(20))
+
+class CartItem(db.Model):
+    __tablename__ = 'cart_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
+    product_id = db.Column(db.String(36), db.ForeignKey('ads.ad_id'))  # ad_id as product_id
+    quantity = db.Column(db.Integer, default=1)
+    shipping_fee_set = db.Column(db.Boolean, default=False)
+    shipping_fee = db.Column(db.Float, default=0.0)
+    negotiation_status = db.Column(db.String(20), default='cart')  # 'cart', 'buyer_submitted', 'seller_updated'
+
+class Ads_Owner(db.Model):
+    __tablename__ = 'ads_owner'
+
+    id = db.Column(db.Integer, primary_key=True)
+    ad_id = db.Column(db.String(36), db.ForeignKey('ads.ad_id'), nullable=False)
+    buyers_whatsapp = db.Column(db.String(20), nullable=True)
+    publishers_whatsapp = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Message(db.Model):
     __tablename__ = 'messages'

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ht">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mete Ajou Panier - Glory2yahPub</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .form-control {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        .product-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+        }
+        .total-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card p-4">
+                    <div class="text-center mb-4">
+                        <h2 class="mb-3"><i class="fas fa-shopping-cart text-primary"></i> Mete Ajou Panier Achte</h2>
+                        <p class="text-muted">Achte pa: <strong>{{ buyer_whatsapp }}</strong></p>
+                    </div>
+
+                    <form method="POST">
+                        {% for item in cart_items %}
+                        <div class="product-card">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <h5 class="mb-1">{{ item.ad.title }}</h5>
+                                    <p class="text-muted mb-2">{{ item.ad.description[:100] }}...</p>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <small class="text-muted">Pri piblisite:</small>
+                                            <p class="mb-0 fw-bold">{{ item.ad.price_gkach }} Gkach</p>
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted">Kantite:</small>
+                                            <p class="mb-0 fw-bold">{{ item.quantity }}</p>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">Pri livrezon pwopoze:</small>
+                                    <p class="mb-0 fw-bold text-primary">{{ item.shipping_fee }} Gkach</p>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="shipping_{{ item.id }}" class="form-label fw-bold">Nouvo pri livrezon (Gkach)</label>
+                                    <input type="number" class="form-control" id="shipping_{{ item.id }}" name="shipping_{{ item.id }}"
+                                           value="{{ item.shipping_fee }}" min="0" step="1" required>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                        <div class="total-section">
+                            <h4 class="mb-3"><i class="fas fa-calculator"></i> Rezime Total</h4>
+                            <div class="row">
+                                <div class="col-6">
+                                    <p class="mb-1">Pri piblisite total:</p>
+                                    <p class="mb-1">Pri livrezon pwopoze:</p>
+                                    <hr class="my-2">
+                                    <p class="mb-0 fs-5 fw-bold">Total pwopoze:</p>
+                                </div>
+                                <div class="col-6 text-end">
+                                    <p class="mb-1">{{ total_product_price }} Gkach</p>
+                                    <p class="mb-1">{{ total_shipping_proposed }} Gkach</p>
+                                    <hr class="my-2">
+                                    <p class="mb-0 fs-5 fw-bold">{{ total_proposed }} Gkach</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i> Mete Ajou Pri Livrezon
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="text-center mt-4">
+                        <p class="text-muted">
+                            <i class="fas fa-info-circle"></i>
+                            Aprè ou mete ajou pri livrezon an, achete a pral resevwa yon notifikasyon WhatsApp pou konfime achte a.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
