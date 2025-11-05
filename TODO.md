@@ -21,4 +21,5 @@ Update the display logic in templates for ADS (ads) to match the requirements:
 ## Progress
 - [x] Updated templates/achte.html
 - [x] Updated templates/batch.html
-- [ ] Test the changes by running the app
+- [x] Test the changes by running the app
+- [x] Commit changes to GitHub repo

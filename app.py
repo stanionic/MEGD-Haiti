@@ -974,7 +974,7 @@ def shopping_cart(ad_id):
         ads_owner = Ads_Owner.query.filter_by(ad_id=ad_id).first()
         if ads_owner:
             seller_whatsapp = ads_owner.publishers_whatsapp
-            update_cart_url = url_for('seller_update_cart', delivery_id=delivery_id, _external=True)
+            update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
             message = f"Hi, I just purchased your ad '{ad.title}' for {price} Gkach. Please update the cart with delivery details. Update here: {update_cart_url}"
             whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
             return redirect(whatsapp_url)
