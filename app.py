@@ -931,20 +931,6 @@ def shopping_cart(ad_id):
             flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
             return redirect(url_for('shopping_cart', ad_id=ad_id))
 
-        # Check balance
-        user_gkach = UserGkach.query.filter_by(user_whatsapp=whatsapp).first()
-        if not user_gkach or user_gkach.gkach_balance < price:
-            flash('Ou pa gen ase Gkach. Achte Gkach anvan.', 'error')
-            return redirect(url_for('achte_gkach'))
-
-        # Deduct balance
-        user_gkach.gkach_balance -= price
-
-        # Credit seller
-        seller_gkach = UserGkach.query.filter_by(user_whatsapp=ad.user_whatsapp).first()
-        if seller_gkach:
-            seller_gkach.gkach_balance += price
-
         # Create delivery
         delivery_id = str(uuid.uuid4())
         delivery = Delivery(
@@ -952,7 +938,7 @@ def shopping_cart(ad_id):
             ad_id=ad_id,
             buyer_whatsapp=whatsapp,
             seller_whatsapp=ad.user_whatsapp,
-            delivery_cost=0,  # No delivery cost for now
+            delivery_cost=0,
             total_price=price,
             status='confirmed',
             cart_items=json.dumps([{
@@ -966,16 +952,15 @@ def shopping_cart(ad_id):
         db.session.add(delivery)
         db.session.commit()
 
-        # Notify buyer and seller
-        notify_user_ad_purchased(whatsapp, ad_id, price)
+        # Notify seller
         notify_seller_delivery_request(ad.user_whatsapp, whatsapp, delivery_address, delivery_id, ad.title, price)
 
-        # Redirect to seller's WhatsApp chat with link to update cart
+        # Redirect to seller's WhatsApp with link to set delivery
         ads_owner = Ads_Owner.query.filter_by(ad_id=ad_id).first()
         if ads_owner:
             seller_whatsapp = ads_owner.publishers_whatsapp
-            update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
-            message = f"Hi, I just purchased your ad '{ad.title}' for {price} Gkach. Please update the cart with delivery details. Update here: {update_cart_url}"
+            set_delivery_url = url_for('set_delivery', delivery_id=delivery_id, _external=True)
+            message = f"A buyer wants to purchase your ad '{ad.title}' for {price} Gkach. Please set the delivery details. Set here: {set_delivery_url}"
             whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
             return redirect(whatsapp_url)
         else:
