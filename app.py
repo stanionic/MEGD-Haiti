@@ -1631,6 +1631,56 @@ def seller_update_cart(buyer_whatsapp):
                          total_shipping_proposed=total_shipping_proposed,
                          total_proposed=total_proposed)
 
+@app.route('/confirm_purchase/<whatsapp>')
+def confirm_purchase(whatsapp):
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    if not cart_items:
+        flash('Panier ou vid.', 'error')
+        return redirect(url_for('achte'))
+
+    # Find seller details
+    seller_whatsapp = None
+    ad_title = None
+    total_price = 0
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            seller_whatsapp = ad.user_whatsapp
+            ad_title = ad.title
+            total_price += ad.price_gkach * item.quantity
+            break  # Assuming single seller for simplicity
+
+    if not seller_whatsapp:
+        flash('Vandè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    # Build shipping card details
+    shipping_details = ""
+    total_shipping = 0
+    for item in cart_items:
+        ad = Ad.query.filter_by(ad_id=item.product_id).first()
+        if ad:
+            shipping_details += f"- {ad.title}: Pri Livrezon {item.shipping_fee} Gkach\n"
+            total_shipping += item.shipping_fee
+
+    # Create WhatsApp message
+    update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
+    message = f"🛒 KONFIMASYON ACHTE - METE AJOU KAT LIVREZON\n\n📦 Piblisite: {ad_title}\n💰 Pri Pwodwi: {total_price} Gkach\n👤 Achte pa: {whatsapp}\n💸 Pri Livrezon Total: {total_shipping} Gkach\n\n📋 Detay Livrezon:\n{shipping_details}\n🔗 Klik sou lyen sa a pou mete ajou kat livrezon an epi renvoye bay achete a: {update_cart_url}\n\n⚠️ Tanpri mete ajou pri livrezon an si nesesè epi renvoye bay achete a."
+
+    whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
+    return redirect(whatsapp_url)
+
 @app.route('/decline_cart/<whatsapp>')
 def decline_cart(whatsapp):
     # Format WhatsApp number
