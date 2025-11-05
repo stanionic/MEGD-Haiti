@@ -1,25 +1,27 @@
-# TODO: Update ADS Display Logic
+# TODO: Implement Shopping Card Update Flow
 
-## Overview
-Update the display logic in templates for ADS (ads) to match the requirements:
-- For ads labelled "Sell" (ad_type == 'sell'): Display only "Achte" and "Fe piblisite" buttons. Show price for all sell ads. Remove WhatsApp button and special case for 'Siwo Gwosi'.
-- For ads labelled "Publish only" (ad_type == 'publish'): Display "WhatsApp" and "Fe piblisite" buttons.
+## 1. Update Models
+- [ ] Add `delivery_address` field to `CartItem` model in `models.py`.
 
-## Steps
-1. Update templates/achte.html: Modify the ad-actions logic to remove WhatsApp for sell ads, remove special case for 'Siwo Gwosi', and ensure publish ads show WhatsApp and Fe piblisite.
-2. Update templates/batch.html: Apply the same changes as in achte.html for consistency.
-3. Test the changes by running the app and verifying the button displays.
+## 2. Update Routes in app.py
+- [ ] Change `shopping_card_update` route to use `whatsapp` parameter instead of `cart_id`.
+- [ ] Update GET logic to determine mode based on negotiation_status.
+- [ ] Update POST logic for submitting shipping proposal, sending WhatsApp to seller.
+- [ ] Add logic for seller updating shipping and sending back to buyer.
+- [ ] Ensure WhatsApp redirects after submissions.
 
-## Files to Edit
-- templates/achte.html
-- templates/batch.html
+## 3. Update Templates
+- [ ] Update `templates/shopping_card_update.html` to handle three modes: enter_shipping, waiting_for_seller, seller_updated.
+- [ ] Add forms and buttons accordingly.
+- [ ] Update `templates/view_cart.html` to add 'Konfime Achte' button redirecting to `shopping_card_update`.
 
-## Followup
-- After editing, run the app to ensure buttons display correctly.
-- No DB changes required as this is template logic.
+## 4. Test the Flow
+- [ ] Test buyer submitting proposal.
+- [ ] Test seller updating price.
+- [ ] Test buyer confirming or declining.
+- [ ] Ensure mobile responsiveness and WhatsApp integration.
 
-## Progress
-- [x] Updated templates/achte.html
-- [x] Updated templates/batch.html
-- [x] Test the changes by running the app
-- [x] Commit changes to GitHub repo
+## 5. Final Checks
+- [ ] Verify database updates.
+- [ ] Check flash messages.
+- [ ] Ensure no errors in routes.

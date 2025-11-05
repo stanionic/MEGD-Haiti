@@ -1450,15 +1450,29 @@ def get_delivery_participants_api(delivery_id):
     except ValueError as e:
         return jsonify({'error': str(e)}), 404
 
-@app.route('/shopping_card_update/<cart_id>', methods=['GET', 'POST'])
-def shopping_card_update(cart_id):
-    cart_items = CartItem.query.filter_by(cart_id=cart_id).all()
-    if not cart_items:
-        flash('Pa gen atik nan panier sa a.', 'error')
+@app.route('/shopping_card_update', methods=['GET', 'POST'])
+def shopping_card_update():
+    whatsapp = request.args.get('whatsapp', '').strip()
+
+    # Format WhatsApp number
+    whatsapp_digits = ''.join(filter(str.isdigit, whatsapp))
+    if not whatsapp_digits.startswith('509'):
+        whatsapp_digits = '509' + whatsapp_digits
+    whatsapp = '+' + whatsapp_digits
+
+    if not whatsapp:
+        flash('Numéro WhatsApp obligatwa.', 'error')
         return redirect(url_for('achte'))
 
-    user = User.query.filter_by(id=cart_items[0].user_id).first()
-    whatsapp = user.whatsapp
+    user = User.query.filter_by(whatsapp=whatsapp).first()
+    if not user:
+        flash('Itilizatè pa jwenn.', 'error')
+        return redirect(url_for('achte'))
+
+    cart_items = CartItem.query.filter_by(user_id=user.id).all()
+    if not cart_items:
+        flash('Pa gen atik nan panier ou.', 'error')
+        return redirect(url_for('achte'))
 
     # Determine mode based on negotiation status
     negotiation_statuses = [item.negotiation_status for item in cart_items]
@@ -1470,63 +1484,82 @@ def shopping_card_update(cart_id):
         mode = 'enter_shipping'
 
     if request.method == 'POST':
-        if mode != 'enter_shipping':
-            flash('Ou pa kapab soumèt pwopozisyon sa a ankò.', 'error')
-            return redirect(url_for('shopping_card_update', cart_id=cart_id))
+        if mode == 'enter_shipping':
+            delivery_address = request.form.get('delivery_address', '').strip()
+            shipping_price = request.form.get('shipping_price', '').strip()
 
-        delivery_address = request.form.get('delivery_address', '').strip()
-        shipping_price = request.form.get('shipping_price', '').strip()
+            if not delivery_address:
+                flash('Adrès livrezon obligatwa.', 'error')
+                return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
 
-        if not delivery_address:
-            flash('Adrès livrezon obligatwa.', 'error')
-            return redirect(url_for('shopping_card_update', cart_id=cart_id))
+            try:
+                shipping_price = int(shipping_price)
+                if shipping_price < 0:
+                    raise ValueError
+            except ValueError:
+                flash('Pri livrezon valab obligatwa.', 'error')
+                return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
 
-        try:
-            shipping_price = int(shipping_price)
-            if shipping_price < 0:
-                raise ValueError
-        except ValueError:
-            flash('Pri livrezon valab obligatwa.', 'error')
-            return redirect(url_for('shopping_card_update', cart_id=cart_id))
+            # Check terms acceptance
+            if not request.form.get('accept_terms'):
+                flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
+                return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
 
-        # Check terms acceptance
-        if not request.form.get('accept_terms'):
-            flash('Ou dwe aksepte kondisyon ak règleman yo.', 'error')
-            return redirect(url_for('shopping_card_update', cart_id=cart_id))
+            # Generate unique cart_id for this submission
+            cart_id = str(uuid.uuid4())
 
-        # Update cart items with shipping fee and status
-        for item in cart_items:
-            item.shipping_fee = shipping_price
-            item.shipping_fee_set = True
-            item.negotiation_status = 'buyer_submitted'
+            # Update cart items with shipping fee, address, status, and cart_id
+            for item in cart_items:
+                item.shipping_fee = shipping_price
+                item.shipping_fee_set = True
+                item.negotiation_status = 'buyer_submitted'
+                item.delivery_address = delivery_address
+                item.cart_id = cart_id
 
-        db.session.commit()
+            db.session.commit()
 
-        # Send WhatsApp notification to seller with link to update cart
-        seller_whatsapp = None
-        ad_title = None
-        total_price = 0
-        for item in cart_items:
-            ad = Ad.query.filter_by(ad_id=item.product_id).first()
-            if ad:
-                seller_whatsapp = ad.user_whatsapp
-                ad_title = ad.title
-                total_price += ad.price_gkach * item.quantity
-                break  # Assuming single seller for simplicity
+            # Send WhatsApp notification to seller with link to update cart
+            seller_whatsapp = None
+            ad_title = None
+            total_price = 0
+            for item in cart_items:
+                ad = Ad.query.filter_by(ad_id=item.product_id).first()
+                if ad:
+                    seller_whatsapp = ad.user_whatsapp
+                    ad_title = ad.title
+                    total_price += ad.price_gkach * item.quantity
+                    break  # Assuming single seller for simplicity
 
-        if seller_whatsapp:
-            update_cart_url = url_for('seller_update_cart', cart_id=cart_id, _external=True)
-            message = f"🛒 NOUVO DEMANN LIVREZON - ACHTE PANIER\n\n📦 Piblisite: {ad_title}\n💰 Pri pwodwi: {total_price} Gkach\n👤 Achte pa: {whatsapp}\n📍 Adrès livrezon: {delivery_address}\n💸 Pri livrezon pwopoze: {shipping_price} Gkach\n\n📋 Detay:\n- Pri total pwopoze: {total_price + shipping_price} Gkach\n\n🔗 Klik sou lyen sa a pou mete ajou pri livrezon an: {update_cart_url}\n\n⚠️ Tanpri revize epi mete ajou pri livrezon an si nesesè."
-            whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
-            # Redirect to WhatsApp
-            return redirect(whatsapp_url)
+            if seller_whatsapp:
+                update_cart_url = url_for('seller_update_cart', buyer_whatsapp=whatsapp, _external=True)
+                message = f"🛒 NOUVO DEMANN LIVREZON - ACHTE PANIER\n\n📦 Piblisite: {ad_title}\n💰 Pri pwodwi: {total_price} Gkach\n👤 Achte pa: {whatsapp}\n📍 Adrès livrezon: {delivery_address}\n💸 Pri livrezon pwopoze: {shipping_price} Gkach\n\n📋 Detay:\n- Pri total pwopoze: {total_price + shipping_price} Gkach\n\n🔗 Klik sou lyen sa a pou mete ajou pri livrezon an: {update_cart_url}\n\n⚠️ Tanpri revize epi mete ajou pri livrezon an si nesesè."
+                whatsapp_url = f"https://wa.me/{seller_whatsapp.replace('+', '')}?text={message}"
+                # Redirect to WhatsApp
+                return redirect(whatsapp_url)
 
-        flash('Panier ou soumèt avèk siksè! Vandè a pral kontakte ou sou WhatsApp pou konfime pri livrezon.', 'success')
-        return redirect(url_for('achte'))
+            flash('Panier ou soumèt avèk siksè! Vandè a pral kontakte ou sou WhatsApp pou konfime pri livrezon.', 'success')
+            return redirect(url_for('achte'))
+
+        elif mode == 'seller_updated':
+            # Buyer confirms purchase
+            action = request.form.get('action')
+            if action == 'confirm':
+                # Proceed to checkout
+                return redirect(url_for('checkout', whatsapp=whatsapp))
+            elif action == 'decline':
+                # Clear cart
+                CartItem.query.filter_by(user_id=user.id).delete()
+                db.session.commit()
+                flash('Ou te refize acha a. Panier ou vide.', 'info')
+                return redirect(url_for('achte'))
+            else:
+                flash('Aksyon envalid.', 'error')
+                return redirect(url_for('shopping_card_update', whatsapp=whatsapp))
 
     # GET: Display based on mode
     cart_data = []
     total_price = 0
+    delivery_address = cart_items[0].delivery_address if cart_items and cart_items[0].delivery_address else ''
 
     for item in cart_items:
         ad = Ad.query.filter_by(ad_id=item.product_id).first()
@@ -1542,7 +1575,7 @@ def shopping_card_update(cart_id):
                 'shipping_fee': item.shipping_fee
             })
 
-    return render_template('shopping_card_update.html', cart_items=cart_data, total_price=total_price, whatsapp=whatsapp, mode=mode, delivery_address='', cart_id=cart_id)
+    return render_template('shopping_card_update.html', cart_items=cart_data, total_price=total_price, whatsapp=whatsapp, mode=mode, delivery_address=delivery_address)
 
 @app.route('/seller_update_cart/<buyer_whatsapp>', methods=['GET', 'POST'])
 def seller_update_cart(buyer_whatsapp):
