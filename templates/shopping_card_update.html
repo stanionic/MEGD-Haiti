@@ -120,7 +120,10 @@
             </div>
 
             <div class="actions">
-                <a href="{{ url_for('confirm_purchase', whatsapp=whatsapp) }}" class="btn btn-success">Konfime Achte</a>
+                <form method="POST" action="{{ url_for('checkout') }}" style="display: inline;">
+                    <input type="hidden" name="whatsapp" value="{{ whatsapp }}">
+                    <button type="submit" class="btn btn-success">Konfime Achte</button>
+                </form>
                 <a href="{{ url_for('decline_cart', whatsapp=whatsapp) }}" class="btn btn-danger">Refize Achte</a>
                 <a href="{{ url_for('achte') }}" class="btn btn-secondary">Kontinye Achte</a>
             </div>
