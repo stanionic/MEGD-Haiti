@@ -1,5 +1,0 @@
-# WhatsApp.me API Configuration
-# Get your API key from WhatsApp.me service
-WHATSAPP_ME_API_KEY=your_whatsapp_me_api_key_here
-
-# Other environment variables...

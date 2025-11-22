@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-info text-white">
+        <h4 class="mb-0">
+            <i class="fas fa-user-graduate me-2"></i>
+            Mes notes académiques
+        </h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-primary">
+            <i class="fas fa-info-circle me-2"></i>
+            Bienvenue <strong>{{ user.full_name }}</strong>. Voici votre palmarès académique.
+        </div>
+
+        {% if grades_data %}
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Cours</th>
+                        <th>Devoirs (30%)</th>
+                        <th>Examen (70%)</th>
+                        <th>Note totale</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for grade in grades_data %}
+                    <tr>
+                        <td><strong>{{ grade.course.title }}</strong></td>
+                        <td>
+                            {% if grade.homework_grade == 'Non noté' %}
+                                <span class="text-muted">{{ grade.homework_grade }}</span>
+                            {% else %}
+                                {{ "%.1f"|format(grade.homework_grade) }}%
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if grade.exam_grade == 'Non noté' %}
+                                <span class="text-muted">{{ grade.exam_grade }}</span>
+                            {% else %}
+                                {{ "%.1f"|format(grade.exam_grade) }}%
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if grade.total_grade == 'Non noté' %}
+                                <span class="text-muted">{{ grade.total_grade }}</span>
+                            {% else %}
+                                <strong>{{ "%.1f"|format(grade.total_grade) }}%</strong>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if grade.status == 'Réussi' %}
+                                <span class="badge bg-success">{{ grade.status }}</span>
+                            {% elif grade.status == 'En reprise' %}
+                                <span class="badge bg-danger">{{ grade.status }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ grade.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Résumé -->
+        <div class="row mt-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <i class="fas fa-chart-pie me-2"></i>
+                            Résumé
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        {% set passed = grades_data|selectattr('status', 'equalto', 'Réussi')|list %}
+                        {% set failed = grades_data|selectattr('status', 'equalto', 'En reprise')|list %}
+                        
+                        <p class="mb-1">Cours réussis: <strong class="text-success">{{ passed|length }}</strong></p>
+                        <p class="mb-1">Cours en reprise: <strong class="text-danger">{{ failed|length }}</strong></p>
+                        <p class="mb-0">Total des cours: <strong>{{ grades_data|length }}</strong></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-warning text-center">
+            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+            <h5>Aucune note disponible</h5>
+            <p class="mb-0">Vos notes n'ont pas encore été saisies par vos professeurs.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

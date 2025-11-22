@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h4 class="mb-0">
+            <i class="fas fa-edit me-2"></i>
+            Gestion des notes - {{ course.title }}
+        </h4>
+        <a href="{{ url_for('manage_courses') }}" class="btn btn-light btn-sm">
+            <i class="fas fa-arrow-left me-1"></i>
+            Retour aux cours
+        </a>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Saisissez les notes pour chaque étudiant. Le système calcule automatiquement la note totale (30% devoirs + 70% examen) et détermine le statut.
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Étudiant</th>
+                        <th>Devoirs (30%)</th>
+                        <th>Examen (70%)</th>
+                        <th>Note totale</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in students_grades %}
+                    <tr>
+                        <td>{{ item.student.full_name }}</td>
+                        <form method="POST">
+                            <input type="hidden" name="student_id" value="{{ item.student.id }}">
+                            <td>
+                                <input type="number" class="form-control form-control-sm" 
+                                       name="homework_grade" value="{{ "%.1f"|format(item.homework_grade) }}" 
+                                       min="0" max="100" step="0.1" required>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" 
+                                       name="exam_grade" value="{{ "%.1f"|format(item.exam_grade) }}" 
+                                       min="0" max="100" step="0.1" required>
+                            </td>
+                            <td>
+                                <strong>{{ "%.1f"|format(item.total_grade) }}%</strong>
+                            </td>
+                            <td>
+                                {% if item.status == 'Réussi' %}
+                                    <span class="badge bg-success">{{ item.status }}</span>
+                                {% elif item.status == 'En reprise' %}
+                                    <span class="badge bg-danger">{{ item.status }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ item.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="submit" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-save me-1"></i>
+                                    Sauvegarder
+                                </button>
+                            </td>
+                        </form>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Légende -->
+        <div class="mt-3">
+            <small class="text-muted">
+                <strong>Légende:</strong> 
+                <span class="badge bg-success">Réussi</span> (≥ 80%) - 
+                <span class="badge bg-danger">En reprise</span> (< 80%)
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}

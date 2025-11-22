@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h3 class="mb-0">
+                    <i class="fas fa-graduation-cap me-2"></i>
+                    Connexion
+                </h3>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" id="loginForm">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user me-2"></i>
+                            Identifiant
+                        </label>
+                        <input type="text" class="form-control" id="username" name="username" 
+                               placeholder="Entrez votre identifiant" required>
+                        <div class="form-text">
+                            Utilisez votre identifiant (ex: prof.dupont, etudiant.leroy, Stan)
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="passwordField" style="display: none;">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock me-2"></i>
+                            Mot de passe
+                        </label>
+                        <input type="password" class="form-control" id="password" name="password" 
+                               placeholder="Entrez votre mot de passe">
+                        <div class="form-text">
+                            Mot de passe requis pour l'administrateur
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-sign-in-alt me-2"></i>
+                            Se connecter
+                        </button>
+                    </div>
+                </form>
+
+                <hr class="my-4">
+                
+                <div class="text-center">
+                    <p class="mb-0">Vous n'avez pas de compte?</p>
+                    <a href="{{ url_for('register') }}" class="btn btn-outline-success mt-2">
+                        <i class="fas fa-user-plus me-2"></i>
+                        Créer un compte
+                    </a>
+                </div>
+
+                <hr class="my-4">
+                
+                <div class="alert alert-info">
+                    <h6 class="alert-heading">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Identifiants de test
+                    </h6>
+                    <p class="mb-1"><strong>Professeurs:</strong></p>
+                    <ul class="mb-2">
+                        <li>prof.dupont</li>
+                        <li>prof.martin</li>
+                    </ul>
+                    <p class="mb-1"><strong>Étudiants:</strong></p>
+                    <ul class="mb-0">
+                        <li>etudiant.leroy</li>
+                        <li>etudiant.bernard</li>
+                        <li>etudiant.moreau</li>
+                        <li>etudiant.petit</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Show password field when username is "Stan"
+    document.getElementById('username').addEventListener('input', function() {
+        const passwordField = document.getElementById('passwordField');
+        const passwordInput = document.getElementById('password');
+        
+        if (this.value.trim() === 'Stan') {
+            passwordField.style.display = 'block';
+            passwordInput.required = true;
+        } else {
+            passwordField.style.display = 'none';
+            passwordInput.required = false;
+            passwordInput.value = '';
+        }
+    });
+</script>
+{% endblock %}

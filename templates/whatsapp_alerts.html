@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header bg-success text-white">
+        <h4 class="mb-0">
+            <i class="fab fa-whatsapp me-2"></i>
+            Alertes WhatsApp - Résultats académiques
+        </h4>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Générez des liens WhatsApp pour envoyer leurs résultats aux étudiants. Les messages sont pré-remplis avec leurs notes et statuts.
+        </div>
+
+        {% if alerts_data %}
+        <div class="row">
+            {% for alert in alerts_data %}
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">{{ alert.student.full_name }}</h6>
+                        <span class="badge bg-primary">{{ alert.courses|length }} cours</span>
+                    </div>
+                    <div class="card-body">
+                        <!-- Résumé des résultats -->
+                        {% set passed = alert.courses|selectattr('status', 'equalto', 'Réussi')|list %}
+                        {% set failed = alert.courses|selectattr('status', 'equalto', 'En reprise')|list %}
+                        
+                        <div class="mb-3">
+                            <span class="badge bg-success me-1">{{ passed|length }} réussis</span>
+                            <span class="badge bg-danger">{{ failed|length }} reprises</span>
+                        </div>
+
+                        <!-- Détail des cours -->
+                        <div
